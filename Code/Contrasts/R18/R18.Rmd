@@ -1,0 +1,865 @@
+---
+title: "R18_ordenació_BRBGA"
+author: "Sinty Garau"
+date: "23/08/2026"
+output: html_document
+---
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# paquets necessaris:
+
+# readxl # per llegir els documents .xls 
+# writexl # per exportar dades a .xls
+# nortest # pels tests de normalitat
+
+# kableExtra # per visualitzar les taules
+
+# definim les opcions per tots els chunks del document: 
+knitr::opts_chunk$set(echo = FALSE, cache=FALSE, message=FALSE, warning=FALSE)
+
+packages = c("readxl","writexl","nortest")
+# ,"kableExtra","DT","dplyr","lubridate"
+
+## Now load or install&load all
+package.check <- lapply(packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE, quietly = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+```
+
+Anam a fer un estudi per obtenir una ordenació de les 8 agregacions amb les seves millors binaritzacions obtingudes a R12 segons la mesura d'execució IoU.
+
+Primer de tot carregam les dades, és a dir, els resultats de la mesura d'execució IoU de les imatges test de cada taula
+- Results\GroundTruth_BW...-redBGAgg... .xls
+dels 8 mètodes (una taula per cada mètode), en una sola taula.
+
+```{r}
+test_im <- c(8,10,13,17,18,20,30,36,37,39,47,49,52,56,57)
+mainPath = "C:/Users/sinty/OneDrive - Universitat de les Illes Balears/TFG_Sinty_Garau"
+resultsPath = paste(mainPath,"/Results",sep = "")
+resultsNames <- list.files(path = resultsPath) # nom de tots els arxius de la carpeta "resultsPath" amb .xls
+```
+
+```{r}
+cat("IoU_methods\n")
+(IoU_methods <- read_excel(paste(mainPath,"/Code/Contrasts/R12/R12_df_millor_bin.xlsx", sep=""))$procés)
+cat("IoU_resultsGTvsBW\n")
+(IoU_resultsGTvsBW <- paste("GroundTruth_BW", IoU_methods, ".xls", sep=""))
+cat("IoU_methods_s\n")
+(IoU_methods_s <- c("ot-rBGAE1","ot-rBGAE2","oa-rBGAMa","ot-rBGAMe","ot-rBGAME","ot-rBGAMi","ot-rBGAMV","ot-rBGAQO"))
+cat("IoU_M\n")
+(IoU_M <- length(IoU_methods))
+cat("IoU_methodsgrey\n")
+(IoU_methodsgrey <- sub(".*-", "", IoU_methods))
+```
+
+La taula global on les columnes són els mètodes i les files els resultats de la mesura IoU de les imatges test és:
+
+```{r}
+IoU_df_methods_wide <- data.frame(matrix(nrow = length(test_im), ncol = IoU_M))
+colnames(IoU_df_methods_wide) <- IoU_methods
+
+for (m in 1:IoU_M){
+  IoU_df_methods_wide[,m] <- read_excel(paste(resultsPath,"/",IoU_resultsGTvsBW[m],sep=""))[test_im,"IoU"]
+}
+
+write_xlsx(data.frame(rownames(IoU_df_methods_wide),IoU_df_methods_wide),paste(mainPath,"/Code/Contrasts/R18/R18_IoU_df_methods_wide.xlsx",sep = ""))
+```
+
+i la taula de factors on la primera columna és un valor de IoU i la segona columna l'etiqueta del mètode al que correspon és:
+
+```{r}
+IoU_df_methods_long <- stack(IoU_df_methods_wide)
+colnames(IoU_df_methods_long) <- c("IoU_value", "method")
+
+write_xlsx(data.frame(rownames(IoU_df_methods_long),IoU_df_methods_long),paste(mainPath,"/Code/Contrasts/R18/R18_IoU_df_methods_long.xlsx",sep = ""))
+```
+
+Calculam la taula de mitjanes, desviacions típiques i medianes experimentals, i de les normalitzacions del conjunt test, per mètode.
+
+$H_0$: la mostra segueix una distribució normal (si $p-valor>0.1$)
+$H_1$: la mostra no segueix una distribució normal (si $p-valor<0.05$)
+
+```{r}
+IoU_df_m_sd_norm <- data.frame(matrix(nrow = IoU_M, ncol = 8))
+rownames(IoU_df_m_sd_norm) <- IoU_methods
+colnames(IoU_df_m_sd_norm) <- c("mean","sd","median","norm_pval","norm_01","norm_01_def","norm_01_aj","norm_01_aj_def")
+
+IoU_df_m_sd_norm[,1] <- colMeans(IoU_df_methods_wide)
+IoU_df_m_sd_norm[,2] <- apply(IoU_df_methods_wide,2,sd)
+IoU_df_m_sd_norm[,3] <- apply(IoU_df_methods_wide,2,median)
+for (m in 1:IoU_M){
+  IoU_df_m_sd_norm[m,4] <- shapiro.test(IoU_df_methods_wide[,m])$p.value
+  if (IoU_df_m_sd_norm[m,4]>0.1){
+    IoU_df_m_sd_norm[m,5] <- 0
+    IoU_df_m_sd_norm[m,6] <- 0
+  }else if (IoU_df_m_sd_norm[m,4]<0.05){
+    IoU_df_m_sd_norm[m,5] <- 1
+    IoU_df_m_sd_norm[m,6] <- 1
+  }else{
+    IoU_df_m_sd_norm[m,5] <- 2
+  }
+  
+  if (IoU_df_m_sd_norm[m,4]>(0.1/IoU_M)){
+    IoU_df_m_sd_norm[m,7] <- 0
+    IoU_df_m_sd_norm[m,8] <- 0
+  }else if (IoU_df_m_sd_norm[m,4]<(0.05/IoU_M)){
+    IoU_df_m_sd_norm[m,7] <- 1
+    IoU_df_m_sd_norm[m,8] <- 1
+  }else{
+    IoU_df_m_sd_norm[m,7] <- 2
+  }
+}
+```
+
+Veiem si el contrast ajustat no decideix per algun mètode.
+
+```{r}
+IoU_idx_norm_aj_2 <- which(IoU_df_m_sd_norm[,7] == 2, arr.ind = TRUE)
+if (length(IoU_idx_norm_aj_2) > 0){
+  cat("El contrast ajustat no decideix pels mètodes: ", paste(IoU_methods[IoU_idx_norm_aj_2], collapse = ", "), "\n")
+  
+  # Genera el nom de l'arxiu i el títol de la gràfica
+  nom_arxiu <- paste("R18_IoU_boxplot_norm_aj.png", sep = "")
+  
+  # Crea el boxplot utilitzant les dades filtrades
+  boxplot(IoU_df_methods_long$IoU_value ~ IoU_df_methods_long$method,
+    horizontal = TRUE, boxwex = 0.5,
+    xlab = "Valors de IoU", ylab = "",
+    main = paste("Comparació de normalitats ajustades de", paste(IoU_methods[IoU_idx_norm_aj_2], collapse = ", ")),
+    names = IoU_methods_s)
+  png(nom_arxiu, width = 1200, height = 800)
+  boxplot(IoU_df_methods_long$IoU_value ~ IoU_df_methods_long$method,
+    horizontal = TRUE, boxwex = 0.5,
+    xlab = "Valors de IoU", ylab = "",
+    main = paste("Comparació de normalitats ajustades de", paste(IoU_methods[IoU_idx_norm_aj_2], collapse = ", ")),
+    names = IoU_methods_s)
+  dev.off()
+}else {
+  cat("El contrast ajustat decideix per tots els mètodes.")
+}
+```
+
+Pels diagrames de caixes decidim que otsu-redBGAggMEOWA sí és normal.
+
+```{r}
+# Si el contrast ajustat no ha decidit per tots els mètodes, assignar aquí els valors finals
+IoU_df_m_sd_norm["otsu-redBGAggMEOWA", 8] <- 0
+```
+
+Veiem si els contrasts individuals no decideixen per algun mètode.
+
+```{r}
+IoU_idx_norm_ind_2 <- which(IoU_df_m_sd_norm[,5] == 2, arr.ind = TRUE)
+if (length(IoU_idx_norm_ind_2) > 0){
+  cat("Els contrasts individuals no decideixen pels mètodes: ", paste(IoU_methods[IoU_idx_norm_ind_2], collapse = ", "), "\n")
+  
+  for (m in IoU_idx_norm_ind_2) {
+  
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R18_IoU_boxplot_norm_ind_", IoU_methods_s[m], ".png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(IoU_df_methods_wide[,m],
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Estudi de la normalitat individual de", IoU_methods[m]),
+      names = IoU_methods_s[m])
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(IoU_df_methods_wide[,m],
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Estudi de la normalitat individual de", IoU_methods[m]),
+      names = IoU_methods_s[m])
+    dev.off()
+  }
+}else {
+  cat("Els contrasts individuals decideixen per tots els mètodes.")
+}
+```
+
+Els contrasts individuals decideixen per tots els mètodes.
+
+```{r}
+# Si els contrasts individuals no han decidit per tots els mètodes, assignar aquí els valors finals
+
+write_xlsx(data.frame(rownames(IoU_df_m_sd_norm),IoU_df_m_sd_norm),paste(mainPath,"/Code/Contrasts/R18/R18_IoU_df_m_sd_norm.xlsx",sep = ""))
+```
+
+Si cal, realitzam l'estudi d'homoscedasticitat, és a dir, si totes les variàncies són o no iguals.
+
+$H_0$: $\sigma_{x_1} = \sigma_{x_2} = \sigma_{x_3}$ (si $p-valor>0.1$)
+$H_1$: hi ha qualque variància diferent (si $p-valor<0.05$)
+
+```{r}
+if (sum(IoU_df_m_sd_norm[,8]) == 0){
+  cat("Tots els mètodes segueixen una distribució normal: ", paste(IoU_df_m_sd_norm[,8], collapse = ", "), "\n")
+  (IoU_hom = bartlett.test(IoU_value ~ method, data = IoU_df_methods_long)$p.value)
+  cat("Com el p-valor del test de Bartlett és", IoU_hom)
+  
+  if (IoU_hom > 0.1){
+    cat(", totes les variàncies sí són iguals.")
+  }else if (IoU_hom < 0.05){
+    cat(", no totes les variàncies són iguals.")
+  }else{
+    cat(", veiem al diagrama de caixes si totes les variàncies són o no iguals.")
+  
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R18_IoU_boxplot_hom.png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(IoU_df_methods_long$IoU_value ~ IoU_df_methods_long$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de totes les variàncies"),
+      names = IoU_methods_s)
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(IoU_df_methods_long$IoU_value ~ IoU_df_methods_long$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de totes les variàncies"),
+      names = IoU_methods_s)
+    dev.off()
+  }
+}else {
+  cat("No tots els mètodes segueixen una distribució normal: ", paste(IoU_df_m_sd_norm[,8], collapse = ", "), "\n")
+}
+```
+
+Anem a comprovar si podem rebutjar o no que les mitjanes de tots els mètodes són iguals. Si es satisfan la normalitat en totes les mostres i l'homoscedasticitat, s'aplica ANOVA. En cas contrari, s'aplica Kruskal-Wallis.
+
+$H_0$: $\mu_{x_1} = \mu_{x_2} = \dots = \mu_{x_{11}}$ (si $p-valor>0.1$)
+$H_1$: hi ha qualque mitjana diferent (si $p-valor<0.05$)
+
+```{r}
+if(sum(IoU_df_m_sd_norm[,8]) == 0 && IoU_hom > 0.1){
+  (IoU_meane_all <- summary(aov(IoU_value ~ method, data = IoU_df_methods_long))[[1]]$"Pr(>F)"[1])
+}else{
+  (IoU_meane_all <- kruskal.test(IoU_value ~ method, data = IoU_df_methods_long)$p.value)
+}
+```
+
+El p-valor ens dóna evidències significatives de que no es pot descartar que totes les mitjanes siguin iguals. I com també tenim evidències significatives de que no es pot descartar que totes les variàncies siguin iguals, passam a fer el mateix estudi amb l'índex FPR, que és millor com més petit sigui.
+
+```{r}
+cat("FPR_methods\n")
+(FPR_methods <- IoU_methods)
+cat("FPR_resultsGTvsBW\n")
+(FPR_resultsGTvsBW <- IoU_resultsGTvsBW)
+cat("FPR_methods_s\n")
+(FPR_methods_s <- IoU_methods_s)
+cat("FPR_M\n")
+(FPR_M <- length(FPR_methods))
+cat("FPR_methodsgrey\n")
+(FPR_methodsgrey <- IoU_methodsgrey)
+```
+
+La taula global on les columnes són els mètodes i les files els resultats de la mesura FPR de les imatges test és:
+
+```{r}
+FPR_df_methods_wide <- data.frame(matrix(nrow = length(test_im), ncol = FPR_M))
+colnames(FPR_df_methods_wide) <- FPR_methods
+
+for (m in 1:FPR_M){
+  FPR_df_methods_wide[,m] <- read_excel(paste(resultsPath,"/",FPR_resultsGTvsBW[m],sep=""))[test_im,"FPR"]
+}
+
+write_xlsx(data.frame(rownames(FPR_df_methods_wide),FPR_df_methods_wide),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_df_methods_wide.xlsx",sep = ""))
+```
+
+i la taula de factors on la primera columna és un valor de FPR i la segona columna l'etiqueta del mètode al que correspon és:
+
+```{r}
+FPR_df_methods_long <- stack(FPR_df_methods_wide)
+colnames(FPR_df_methods_long) <- c("FPR_value", "method")
+
+write_xlsx(data.frame(rownames(FPR_df_methods_long),FPR_df_methods_long),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_df_methods_long.xlsx",sep = ""))
+```
+
+Calculam la taula de mitjanes, desviacions típiques i medianes experimentals, i de les normalitzacions del conjunt test, per mètode.
+
+$H_0$: la mostra segueix una distribució normal (si $p-valor>0.1$)
+$H_1$: la mostra no segueix una distribució normal (si $p-valor<0.05$)
+
+```{r}
+FPR_df_m_sd_norm <- data.frame(matrix(nrow = FPR_M, ncol = 8))
+rownames(FPR_df_m_sd_norm) <- FPR_methods
+colnames(FPR_df_m_sd_norm) <- c("mean","sd","median","norm_pval","norm_01","norm_01_def","norm_01_aj","norm_01_aj_def")
+
+FPR_df_m_sd_norm[,1] <- colMeans(FPR_df_methods_wide)
+FPR_df_m_sd_norm[,2] <- apply(FPR_df_methods_wide,2,sd)
+FPR_df_m_sd_norm[,3] <- apply(FPR_df_methods_wide,2,median)
+for (m in 1:FPR_M){
+  FPR_df_m_sd_norm[m,4] <- shapiro.test(FPR_df_methods_wide[,m])$p.value
+  if (FPR_df_m_sd_norm[m,4]>0.1){
+    FPR_df_m_sd_norm[m,5] <- 0
+    FPR_df_m_sd_norm[m,6] <- 0
+  }else if (FPR_df_m_sd_norm[m,4]<0.05){
+    FPR_df_m_sd_norm[m,5] <- 1
+    FPR_df_m_sd_norm[m,6] <- 1
+  }else{
+    FPR_df_m_sd_norm[m,5] <- 2
+  }
+  
+  if (FPR_df_m_sd_norm[m,4]>(0.1/FPR_M)){
+    FPR_df_m_sd_norm[m,7] <- 0
+    FPR_df_m_sd_norm[m,8] <- 0
+  }else if (FPR_df_m_sd_norm[m,4]<(0.05/FPR_M)){
+    FPR_df_m_sd_norm[m,7] <- 1
+    FPR_df_m_sd_norm[m,8] <- 1
+  }else{
+    FPR_df_m_sd_norm[m,7] <- 2
+  }
+}
+```
+
+Veiem si el contrast ajustat no decideix per algun mètode.
+
+```{r}
+FPR_idx_norm_aj_2 <- which(FPR_df_m_sd_norm[,7] == 2, arr.ind = TRUE)
+if (length(FPR_idx_norm_aj_2) > 0){
+  cat("El contrast ajustat no decideix pels mètodes: ", paste(FPR_methods[FPR_idx_norm_aj_2], collapse = ", "), "\n")
+  
+  # Genera el nom de l'arxiu i el títol de la gràfica
+  nom_arxiu <- paste("R18_FPR_boxplot_norm_aj.png", sep = "")
+  
+  # Crea el boxplot utilitzant les dades filtrades
+  boxplot(FPR_df_methods_long$FPR_value ~ FPR_df_methods_long$method,
+    horizontal = TRUE, boxwex = 0.5,
+    xlab = "Valors de FPR", ylab = "",
+    main = paste("Comparació de normalitats ajustades de", paste(FPR_methods[FPR_idx_norm_aj_2], collapse = ", ")),
+    names = FPR_methods_s)
+  png(nom_arxiu, width = 1200, height = 800)
+  boxplot(FPR_df_methods_long$FPR_value ~ FPR_df_methods_long$method,
+    horizontal = TRUE, boxwex = 0.5,
+    xlab = "Valors de FPR", ylab = "",
+    main = paste("Comparació de normalitats ajustades de", paste(FPR_methods[FPR_idx_norm_aj_2], collapse = ", ")),
+    names = FPR_methods_s)
+  dev.off()
+}else {
+  cat("El contrast ajustat decideix per tots els mètodes.")
+}
+```
+
+El contrast ajustat decideix per tot els mètodes. 
+
+```{r}
+# Si el contrast ajustat no ha decidit per tots els mètodes, assignar aquí els valors finals
+```
+
+Veiem si els contrasts individuals no decideixen per algun mètode.
+
+```{r}
+FPR_idx_norm_ind_2 <- which(FPR_df_m_sd_norm[,5] == 2, arr.ind = TRUE)
+if (length(FPR_idx_norm_ind_2) > 0){
+  cat("Els contrasts individuals no decideixen pels mètodes: ", paste(FPR_methods[FPR_idx_norm_ind_2], collapse = ", "), "\n")
+  
+  for (m in FPR_idx_norm_ind_2) {
+  
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R18_FPR_boxplot_norm_ind_", FPR_methods_s[m], ".png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(FPR_df_methods_wide[,m],
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de FPR", ylab = "",
+      main = paste("Estudi de la normalitat individual de", FPR_methods[m]),
+      names = FPR_methods_s[m])
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(FPR_df_methods_wide[,m],
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de FPR", ylab = "",
+      main = paste("Estudi de la normalitat individual de", FPR_methods[m]),
+      names = FPR_methods_s[m])
+    dev.off()
+  }
+}else {
+  cat("Els contrasts individuals decideixen per tots els mètodes.")
+}
+```
+
+Pels diagrames de caixes decidim que no són normals.
+
+```{r}
+# Si els contrasts individuals no han decidit per tots els mètodes, assignar aquí els valors finals
+FPR_df_m_sd_norm[which(is.na(FPR_df_m_sd_norm[,6]), arr.ind = TRUE), 6] <- 1
+
+write_xlsx(data.frame(rownames(FPR_df_m_sd_norm),FPR_df_m_sd_norm),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_df_m_sd_norm.xlsx",sep = ""))
+```
+
+Si cal, realitzam l'estudi d'homoscedasticitat, és a dir, si totes les variàncies són o no iguals.
+
+$H_0$: $\sigma_{x_1} = \sigma_{x_2} = \sigma_{x_3}$ (si $p-valor>0.1$)
+$H_1$: hi ha qualque variància diferent (si $p-valor<0.05$)
+
+```{r}
+if (sum(FPR_df_m_sd_norm[,8]) == 0){
+  cat("Tots els mètodes segueixen una distribució normal: ", paste(FPR_df_m_sd_norm[,8], collapse = ", "), "\n")
+  (FPR_hom = bartlett.test(FPR_value ~ method, data = FPR_df_methods_long)$p.value)
+  cat("Com el p-valor del test de Bartlett és", FPR_hom)
+  
+  if (FPR_hom > 0.1){
+    cat(", totes les variàncies sí són iguals.")
+  }else if (FPR_hom < 0.05){
+    cat(", no totes les variàncies són iguals.")
+  }else{
+    cat(", veiem al diagrama de caixes si totes les variàncies són o no iguals.")
+  
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R18_FPR_boxplot_hom.png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(FPR_df_methods_long$FPR_value ~ FPR_df_methods_long$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de FPR", ylab = "",
+      main = paste("Comparació de totes les variàncies"),
+      names = FPR_methods_s)
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(FPR_df_methods_long$FPR_value ~ FPR_df_methods_long$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de FPR", ylab = "",
+      main = paste("Comparació de totes les variàncies"),
+      names = FPR_methods_s)
+    dev.off()
+  }
+}else {
+  cat("No tots els mètodes segueixen una distribució normal: ", paste(FPR_df_m_sd_norm[,8], collapse = ", "), "\n")
+}
+```
+
+Anem a comprovar si podem rebutjar o no que les mitjanes de tots els mètodes són iguals. Si es satisfan la normalitat en totes les mostres i l'homoscedasticitat, s'aplica ANOVA. En cas contrari, s'aplica Kruskal-Wallis.
+
+$H_0$: $\mu_{x_1} = \mu_{x_2} = \dots = \mu_{x_{11}}$ (si $p-valor>0.1$)
+$H_1$: hi ha qualque mitjana diferent (si $p-valor<0.05$)
+
+```{r}
+if(sum(FPR_df_m_sd_norm[,8]) == 0 && FPR_hom > 0.1){
+  (FPR_meane_all <- summary(aov(FPR_value ~ method, data = FPR_df_methods_long))[[1]]$"Pr(>F)"[1])
+}else{
+  (FPR_meane_all <- kruskal.test(FPR_value ~ method, data = FPR_df_methods_long)$p.value)
+}
+```
+
+El p-valor ens dóna evidències significatives de que no totes les mitjanes són iguals.
+
+Comparem idò per parells de mètodes si tenen o no mateixa mitjana. Si es satisfan la normalitat en totes les mostres i l'homoscedasticitat, s'aplica el test t per parelles amb ajust de Bonferroni. En cas contrari, s'aplica el test de Mann-Whitney per parelles amb l'ajust dels p-valors de Bonferroni.
+
+$H_0$: $\mu_{x_1} = \mu_{x_2}$ (si $p-valor>0.1$)
+$H_1$: $\mu_{x_1} \neq \mu_{x_2}$ (si $p-valor<0.05$)
+
+```{r}
+FPR_df_meane_pval <- data.frame(matrix(nrow = FPR_M, ncol = FPR_M))
+rownames(FPR_df_meane_pval) <- FPR_methods
+colnames(FPR_df_meane_pval) <- FPR_methods
+FPR_df_meane_01 <- FPR_df_meane_pval
+FPR_df_mean <- FPR_df_meane_pval
+
+if(sum(FPR_df_m_sd_norm[,8]) == 0 && FPR_hom > 0.1){
+  FPR_df_meane_pval[2:FPR_M,1:(FPR_M-1)] <- pairwise.t.test(FPR_df_methods_long$FPR_value, FPR_df_methods_long$method, paired = TRUE, p.adjust.method = "bonferroni")$p.value
+}else{
+  FPR_df_meane_pval[2:FPR_M,1:(FPR_M-1)] <- pairwise.wilcox.test(FPR_df_methods_long$FPR_value, FPR_df_methods_long$method, paired = TRUE, p.adjust.method = "bonferroni")$p.value
+}
+
+FPR_df_meane_01[] <- ifelse(FPR_df_meane_pval > 0.1, 0, ifelse(FPR_df_meane_pval < 0.05, 1, 2))
+FPR_df_mean[] <- ifelse(FPR_df_meane_pval > 0.1, "=", ifelse(FPR_df_meane_pval < 0.05, "dif", "?"))
+```
+
+```{r}
+FPR_idx_meane_2 <- which(FPR_df_meane_01 == 2, arr.ind = TRUE)
+if (length(FPR_idx_meane_2) > 0){
+  for (k in 1:nrow(FPR_idx_meane_2)) {
+    i <- FPR_idx_meane_2[k, "row"]
+    j <- FPR_idx_meane_2[k, "col"]
+  
+    # Filtra el dataframe llarg per obtenir les dades dels dos mètodes
+    FPR_df_comp_meane <- stack(FPR_df_methods_wide[,c(i,j)])
+    colnames(FPR_df_comp_meane) <- c("FPR_value", "method")
+  
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R18_FPR_boxplot_meane_", FPR_methods_s[i], "_", FPR_methods_s[j], ".png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(FPR_df_comp_meane$FPR_value ~ FPR_df_comp_meane$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de FPR", ylab = "",
+      main = paste("Comparació de mean per", FPR_methods_s[i], "=", FPR_methods_s[j]),
+      names = FPR_methods_s[c(i,j)])
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(FPR_df_comp_meane$FPR_value ~ FPR_df_comp_meane$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de FPR", ylab = "",
+      main = paste("Comparació de mean per", FPR_methods_s[i], "=", FPR_methods_s[j]),
+      names = FPR_methods_s[c(i,j)])
+    dev.off()
+  }
+}else {
+  cat("Tots els contrastos decideixen.")
+}
+```
+
+Amb els boxplots obtinguts descartam que tenguin mitjanes iguals.
+
+```{r}
+# Si qualque contrast no ha decidit, assignar aquí els valors finals
+FPR_df_meane_01[FPR_df_meane_01 == 2] <- 1
+FPR_df_mean[FPR_df_mean == "?"] <- "dif"
+```
+
+```{r}
+write_xlsx(data.frame(rownames(FPR_df_meane_pval),FPR_df_meane_pval),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_meane_pval.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(FPR_df_meane_01),FPR_df_meane_01),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_meane_01.xlsx",sep = ""))
+```
+
+Dels mètodes que s'han determinat com diferents, es comparen parell a parell individualment. Per saber quin test i contrast aplicar, s'han de comprovar: la normalitat, les variàncies, i les mitjanes mostrals.
+
+Feim les taules de variàncies. La primera té els p-valors de realitzar el contrast de variàncies següent, per cada parell de mètodes:
+
+$H_0$: $\sigma_x = \sigma_y$ (si $p-valor>0.1$)
+$H_1$: $\sigma_x \neq \sigma_y$ (si $p-valor<0.05$)
+
+Si ambdues mostres provenen de distribucions normals, s'aplica el test F, sinó el test de Fligner-Killeen.
+
+```{r}
+FPR_df_var_cont <- data.frame(matrix(nrow = FPR_M, ncol = FPR_M)) # Tipus de contrast aplicat
+rownames(FPR_df_var_cont) <- FPR_methods
+colnames(FPR_df_var_cont) <- FPR_methods
+FPR_df_var_pval <- FPR_df_var_cont # p-valor del contrast aplicat
+FPR_df_var_01 <- FPR_df_var_cont # Hipòtesi acceptada del contrast aplicat
+FPR_df_var <- FPR_df_var_cont # Relació final
+for (i in 2:nrow(FPR_df_var)){
+  for (j in 1:(i-1)){
+    FPR_df_comp_var <- stack(FPR_df_methods_wide[,c(i,j)])
+    colnames(FPR_df_comp_var) <- c("FPR_value", "method")
+        
+    if (FPR_df_m_sd_norm[i,6]==0 && FPR_df_m_sd_norm[j,6]==0){ # Si ambdós són normals, igualtat
+      FPR_df_var_pval[i, j] <- var.test(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method, paired = TRUE)$p.value 
+    }else{ # Si no són ambdós normals
+      FPR_df_var_pval[i, j] <- fligner.test(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method)$p.value
+    }
+        
+    if (FPR_df_var_pval[i, j] > 0.1){
+      FPR_df_var_cont[i, j] <- "="
+      FPR_df_var_01[i, j] <- 0
+      FPR_df_var[i, j] <- "="
+    }else if (FPR_df_var_pval[i, j] < 0.05){
+      FPR_df_var_01[i,j] <- 1
+    }else{
+      FPR_df_var_01[i,j] <- 2
+
+      # Genera el nom de l'arxiu i el títol de la gràfica
+      nom_arxiu <- paste("R18_FPR_boxplot_vare_", FPR_methods_s[i], "_", FPR_methods_s[j], ".png", sep = "")
+
+      # Crea el boxplot utilitzant les dades filtrades
+      boxplot(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de FPR", ylab = "",
+        main = paste("Comparació de var per", FPR_methods_s[i], "=", FPR_methods_s[j]),
+        names = c(FPR_methods_s[i],FPR_methods_s[j]))
+      png(nom_arxiu, width = 1200, height = 800)
+      boxplot(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de FPR", ylab = "",
+        main = paste("Comparació de var per", FPR_methods_s[i], "=", FPR_methods_s[j]),
+        names = c(FPR_methods_s[i],FPR_methods_s[j]))
+      dev.off()
+    }
+  }
+}
+```
+
+Tots els contrasts decideixen.
+
+```{r}
+# FPR_df_var_01[FPR_df_var_01 == 2] <- 1
+```
+
+Estudiem quina relació tenen les variàncies que han resultat ser estadísticament no iguals. Si ambdues mostres provenen de distribucions normals, aplicarem var.test, sinó ens basarem amb boxplots. A més ens basarem amb les desviacions mostrals per decidir quin contrast aplicar:
+
+- Si $s_{X} > s_{Y}$, aplicam el contrast
+
+$H_0$: $\sigma_x \leq \sigma_y$ (si $p-valor>0.1$)
+$H_1$: $\sigma_x > \sigma_y$ (si $p-valor<0.05$)
+
+- Si $s_{X} < s_{Y}$, aplicam el contrast
+
+$H_0$: $\sigma_x \geq \sigma_y$ (si $p-valor>0.1$)
+$H_1$: $\sigma_x < \sigma_y$ (si $p-valor<0.05$)
+
+```{r}
+FPR_idx_var_dif <- which(FPR_df_var_01 == 1, arr.ind = TRUE)
+if (length(FPR_idx_var_dif) > 0){
+  for (k in 1:nrow(FPR_idx_var_dif)) {
+    i <- FPR_idx_var_dif[k, "row"]
+    j <- FPR_idx_var_dif[k, "col"]
+  
+    # Filtra el dataframe llarg per obtenir les dades dels dos mètodes
+    FPR_df_comp_var <- stack(FPR_df_methods_wide[,c(i,j)])
+    colnames(FPR_df_comp_var) <- c("FPR_value", "method")
+  
+    if (FPR_df_m_sd_norm[i, 2] > FPR_df_m_sd_norm[j, 2]){ # Contrast >
+      FPR_df_var_cont[i,j] <- ">"
+      if (FPR_df_m_sd_norm[i, 6]==0 && FPR_df_m_sd_norm[j, 6]==0){ # Si són normals
+        FPR_df_var_pval[i,j] <- var.test(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method, alternative = "greater", paired = TRUE)$p.value
+      }else{
+        FPR_df_var_pval[i,j] <- 2 # Aquí serveix d'indicador, no és un p-valor real
+        FPR_df_var_01[i,j] <- 2
+      }
+          
+      if (FPR_df_var_pval[i,j] > 0.1 && FPR_df_var_pval[i,j] != 2){
+        FPR_df_var_01[i,j] <- 0
+        FPR_df_var[i,j] <- "<"
+      }else if (FPR_df_var_pval[i,j] < 0.05){
+        FPR_df_var_01[i,j] <- 1
+        FPR_df_var[i,j] <- ">"
+      }else{
+        # Genera el nom de l'arxiu i el títol de la gràfica
+        nom_arxiu <- paste("R18_FPR_boxplot_varg_", FPR_methods_s[i], "_", FPR_methods_s[j], ".png", sep = "")
+  
+        # Crea el boxplot utilitzant les dades filtrades
+        boxplot(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method,
+          horizontal = TRUE, boxwex = 0.5,
+          xlab = "Valors de FPR", ylab = "",
+          main = paste("Comparació de var per", FPR_methods_s[i], ">", FPR_methods_s[j]),
+          names = c(FPR_methods_s[i],FPR_methods_s[j]))
+        png(nom_arxiu, width = 1200, height = 800)
+        boxplot(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method,
+          horizontal = TRUE, boxwex = 0.5,
+          xlab = "Valors de FPR", ylab = "",
+          main = paste("Comparació de var per", FPR_methods_s[i], ">", FPR_methods_s[j]),
+          names = c(FPR_methods_s[i],FPR_methods_s[j]))
+        dev.off()
+      }
+    }else{ # Contrast <
+      FPR_df_var_cont[i,j] <- "<"
+      if (FPR_df_m_sd_norm[i, 6]==0 && FPR_df_m_sd_norm[j, 6]==0){ # Si són normals
+        FPR_df_var_pval[i,j] <- var.test(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method, alternative = "less", paired = TRUE)$p.value
+      }else{
+        FPR_df_var_pval[i,j] <- 2 # Aquí serveix d'indicador, no és un p-valor real
+        FPR_df_var_01[i,j] <- 2
+      }
+          
+      if (FPR_df_var_pval[i,j] > 0.1 && FPR_df_var_pval[i,j] != 2){
+        FPR_df_var_01[i,j] <- 0
+        FPR_df_var[i,j] <- ">"
+      }else if (FPR_df_var_pval[i,j] < 0.05){
+        FPR_df_var_01[i,j] <- 1
+        FPR_df_var[i,j] <- "<"
+      }else{
+        # Genera el nom de l'arxiu i el títol de la gràfica
+        nom_arxiu <- paste("R18_FPR_boxplot_varl_", FPR_methods_s[i], "_", FPR_methods_s[j], ".png", sep = "")
+  
+        # Crea el boxplot utilitzant les dades filtrades
+        boxplot(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method,
+          horizontal = TRUE, boxwex = 0.5,
+          xlab = "Valors de FPR", ylab = "",
+          main = paste("Comparació de var per", FPR_methods_s[i], "<", FPR_methods_s[j]),
+          names = c(FPR_methods_s[i],FPR_methods_s[j]))
+        png(nom_arxiu, width = 1200, height = 800)
+        boxplot(FPR_df_comp_var$FPR_value ~ FPR_df_comp_var$method,
+          horizontal = TRUE, boxwex = 0.5,
+          xlab = "Valors de FPR", ylab = "",
+          main = paste("Comparació de var per", FPR_methods_s[i], "<", FPR_methods_s[j]),
+          names = c(FPR_methods_s[i],FPR_methods_s[j]))
+        dev.off()
+      }
+    }
+  }
+}else {
+  cat("Totes les variàncies han resultat ser estadísticament iguals.")
+}
+```
+
+Totes les variàncies han resultat ser estadísticament iguals.
+
+```{r}
+# FPR_df_var[which(FPR_df_var_01 == 2, arr.ind = TRUE)] <- FPR_df_var_cont[which(FPR_df_var_01 == 2, arr.ind = TRUE)]
+# FPR_df_var_01[FPR_df_var_01 == 2] <- 1
+```
+
+```{r}
+write_xlsx(data.frame(rownames(FPR_df_var_cont),FPR_df_var_cont),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_var_cont.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(FPR_df_var_pval),FPR_df_var_pval),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_var_pval.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(FPR_df_var_01),FPR_df_var_01),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_var_01.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(FPR_df_var),FPR_df_var),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_df_var.xlsx",sep = ""))
+```
+
+A continuació feim els contrasts de desigualtat de mitjanes per cada parell de mètodes que han resultat ser estadísticament diferents.
+
+El contrast a aplicar dependrà de la relació de les mitjanes mostrals:
+
+- Si $\overline{X} > \overline{Y}$, aplicam el contrast
+
+$H_0$: $\mu_x \leq \mu_y$ (si $p-valor>0.1$)
+$H_1$: $\mu_x > \mu_y$ (si $p-valor<0.05$)
+
+- Si $\overline{X} < \overline{Y}$, aplicam el contrast
+
+$H_0$: $\mu_x \geq \mu_y$ (si $p-valor>0.1$)
+$H_1$: $\mu_x < \mu_y$ (si $p-valor<0.05$)
+
+```{r}
+FPR_df_meand_pval <- data.frame(matrix(nrow = FPR_M, ncol = FPR_M))
+rownames(FPR_df_meand_pval) <- FPR_methods
+colnames(FPR_df_meand_pval) <- FPR_methods
+FPR_df_meand_01 <- FPR_df_meand_pval
+FPR_df_meand_cont <- FPR_df_meand_pval
+FPR_idx_mean_dif <- which(FPR_df_meane_01 == 1, arr.ind = TRUE)
+for (k in 1:nrow(FPR_idx_mean_dif)) {
+  i <- FPR_idx_mean_dif[k, "row"]
+  j <- FPR_idx_mean_dif[k, "col"]
+  
+  # Filtra el dataframe llarg per obtenir les dades dels dos mètodes
+  FPR_df_comp_meand <- stack(FPR_df_methods_wide[,c(i,j)])
+  colnames(FPR_df_comp_meand) <- c("FPR_value", "method")
+    
+  if (FPR_df_m_sd_norm[i, 1] > FPR_df_m_sd_norm[j, 1]){ #si mean(i) > mean(j)
+    FPR_df_meand_cont[i,j] <- ">"
+    if (FPR_df_m_sd_norm[i, 6]==0 && FPR_df_m_sd_norm[j, 6]==0){ #si ambdós normals
+      if (FPR_df_var[i,j] == "="){ #si desviacions iguals
+        FPR_df_meand_pval[i,j] <- t.test(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method, alternative = "greater", paired = TRUE, var.equal = TRUE)$p.value
+      }else{
+        FPR_df_meand_pval[i,j] <- t.test(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method, alternative = "greater", paired = TRUE)$p.value
+      }
+    }else{
+      FPR_df_meand_pval[i,j] <- wilcox.test(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method,alternative = "greater",paired = TRUE)$p.value
+    }
+      
+    if (FPR_df_meand_pval[i,j] > 0.1){
+      FPR_df_meand_01[i,j] <- 0
+      FPR_df_mean[i,j] <- "<"
+    }else if (FPR_df_meand_pval[i,j] < 0.05){
+      FPR_df_meand_01[i,j] <- 1
+      FPR_df_mean[i,j] <- ">"
+    }else{
+      FPR_df_meand_01[i,j] <- 2
+            
+      # Genera el nom de l'arxiu i el títol de la gràfica
+      nom_arxiu <- paste("R18_FPR_boxplot_meang_", FPR_methods_s[i], "_", FPR_methods_s[j], ".png", sep = "")
+  
+      # Crea el boxplot utilitzant les dades filtrades
+      boxplot(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de FPR", ylab = "",
+        main = paste("Comparació de mean per", FPR_methods_s[i], ">", FPR_methods_s[j]),
+        names = c(FPR_methods_s[i],FPR_methods_s[j]))
+      png(nom_arxiu, width = 1200, height = 800)
+      boxplot(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de FPR", ylab = "",
+        main = paste("Comparació de mean per", FPR_methods_s[i], ">", FPR_methods_s[j]),
+        names = c(FPR_methods_s[i],FPR_methods_s[j]))
+      dev.off()
+    }
+  }else{ #si mean(i) < mean(j)
+    FPR_df_meand_cont[i,j] <- "<"
+    if (FPR_df_m_sd_norm[i, 6]==0 && FPR_df_m_sd_norm[j, 6]==0){ #si ambdós normals
+      if (FPR_df_var[i,j] == "="){ #si desviacions iguals
+        FPR_df_meand_pval[i,j] <- t.test(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method, alternative = "less", paired = TRUE, var.equal = TRUE)$p.value
+      }else{
+        FPR_df_meand_pval[i,j] <- t.test(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method, alternative = "less", paired = TRUE)$p.value
+      }
+    }else{
+      FPR_df_meand_pval[i,j] <- wilcox.test(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method,alternative = "less",paired = TRUE)$p.value
+    }
+      
+    if (FPR_df_meand_pval[i,j] > 0.1){
+      FPR_df_meand_01[i,j] <- 0
+      FPR_df_mean[i,j] <- ">"
+    }else if (FPR_df_meand_pval[i,j] < 0.05){
+      FPR_df_meand_01[i,j] <- 1
+      FPR_df_mean[i,j] <- "<"
+    }else{
+      FPR_df_meand_01[i,j] <- 2
+            
+      # Genera el nom de l'arxiu i el títol de la gràfica
+      nom_arxiu <- paste("R18_FPR_boxplot_meanl_", FPR_methods_s[i], "_", FPR_methods_s[j], ".png", sep = "")
+  
+      # Crea el boxplot utilitzant les dades filtrades
+      boxplot(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de FPR", ylab = "",
+        main = paste("Comparació de mean per", FPR_methods_s[i], "<", FPR_methods_s[j]),
+        names = c(FPR_methods_s[i],FPR_methods_s[j]))
+      png(nom_arxiu, width = 1200, height = 800)
+      boxplot(FPR_df_comp_meand$FPR_value ~ FPR_df_comp_meand$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de FPR", ylab = "",
+        main = paste("Comparació de mean per", FPR_methods_s[i], "<", FPR_methods_s[j]),
+        names = c(FPR_methods_s[i],FPR_methods_s[j]))
+      dev.off()
+    }
+  }
+}
+```
+
+El contrast decideix per totes les combinacions.
+
+```{r warning=FALSE}
+write_xlsx(data.frame(rownames(FPR_df_meand_cont),FPR_df_meand_cont),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_meand_cont.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(FPR_df_meand_pval),FPR_df_meand_pval),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_meand_pval.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(FPR_df_meand_01),FPR_df_meand_01),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_meand_01.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(FPR_df_mean),FPR_df_mean),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_df_mean.xlsx",sep = ""))
+```
+
+Per acabar, cream la taula que indica de cada mètode, a quants altres mètodes supera, a quants n'és inferior, i la posició en la jerarquia dels millors mètodes a la que pertany.
+
+```{r}
+FPR_df_ord <- data.frame(matrix(nrow = FPR_M, ncol = 5))
+rownames(FPR_df_ord) <- FPR_methods
+colnames(FPR_df_ord) <- c("millor_que","pitjor_que","ord","ord_def","methodsgrey")
+FPR_df_ord$methodsgrey <- FPR_methodsgrey
+
+for (m in 1:FPR_M) {
+  FPR_df_ord[m, 1] <- sum(FPR_df_mean[m, ] == '<', na.rm = TRUE) + sum(FPR_df_mean[, m] == '>', na.rm = TRUE)
+  FPR_df_ord[m, 2] <- sum(FPR_df_mean[m, ] == '>', na.rm = TRUE) + sum(FPR_df_mean[, m] == '<', na.rm = TRUE)
+}
+FPR_df_ord$ord <- rank(-100*FPR_df_ord$millor_que + FPR_df_ord$pitjor_que, ties.method = "min")
+df_ord_final <- FPR_df_ord[order(FPR_df_ord$ord),]
+FPR_df_ord$ord_def <- FPR_df_ord$ord
+
+FPR_list_ord <- split(rownames(FPR_df_ord), FPR_df_ord[[3]])
+FPR_list_ord_long <- sapply(FPR_list_ord, length)
+FPR_list_ord_empats <- sum(FPR_list_ord_long > 1)
+if (FPR_list_ord_empats == 0){
+  cat("No hi ha empats\n")
+  (FPR_df_ord)
+  write_xlsx(data.frame(rownames(FPR_df_ord),FPR_df_ord),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_df_ord.xlsx",sep = ""))
+}else{
+  cat("Hi ha", FPR_list_ord_empats, "empats:\n")
+  (FPR_list_empats <- FPR_list_ord[FPR_list_ord_long > 1])
+}
+```
+
+Hi ha 1 empat entre varis processos: otsu-redBGAggMean i otsu-redBGAggMVOWA.
+
+Comprovam quina relació estadística tenien:
+
+```{r}
+for(emp in names(FPR_list_empats)){
+  print(FPR_df_mean[FPR_list_empats[[emp]],FPR_list_empats[[emp]]])
+}
+```
+
+Són tots iguals. Comprovam relació de variàncies:
+
+```{r}
+for(emp in names(FPR_list_empats)){
+  print(FPR_df_var[FPR_list_empats[[emp]],FPR_list_empats[[emp]]])
+}
+```
+
+Com qualsevol mesura indica un millor resultat com menor sigui la variància, no obtenim cap conclusió addicional. Però sí tenim quin és el millor mètode d'entre tots, per tant finalitzam aquí l'estudi.
+
+```{r}
+write_xlsx(data.frame(rownames(FPR_df_ord),FPR_df_ord),paste(mainPath,"/Code/Contrasts/R18/R18_FPR_df_ord.xlsx",sep = ""))
+
+df_ord_final$ord_def <- df_ord_final$ord
+df_ord_final <- df_ord_final[order(df_ord_final$ord_def),]
+```
+
+```{r}
+write_xlsx(data.frame(rownames(df_ord_final),df_ord_final),paste(mainPath,"/Code/Contrasts/R18/R18_df_ord_final.xlsx",sep = ""))
+```
