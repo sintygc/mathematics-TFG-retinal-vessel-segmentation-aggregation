@@ -1,0 +1,875 @@
+---
+title: "R13_millor_bin_RBMGA"
+author: "Sinty Garau"
+date: "23/08/2026"
+output: html_document
+---
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# paquets necessaris:
+
+# readxl # per llegir els documents .xls 
+# writexl # per exportar dades a .xls
+# nortest # pels tests de normalitat
+
+# kableExtra # per visualitzar les taules
+
+# definim les opcions per tots els chunks del document: 
+knitr::opts_chunk$set(echo = FALSE, cache=FALSE, message=FALSE, warning=FALSE)
+
+packages = c("readxl","writexl","nortest")
+# ,"kableExtra","DT","dplyr","lubridate"
+
+## Now load or install&load all
+package.check <- lapply(packages,
+  FUN = function(x) {
+    if (!require(x, character.only = TRUE, quietly = TRUE)) {
+      install.packages(x, dependencies = TRUE)
+      library(x, character.only = TRUE)
+    }
+  }
+)
+```
+
+Anam a fer un estudi per obtenir la millor binarització per cada agregació del nombre reduït de mètodes extret de R06 segons la mesura d'execució IoU.
+
+Primer de tot carregam les dades, és a dir, els resultats de la mesura d'execució IoU de les imatges test de cada taula
+- Results\GroundTruth_BWotsu-redBMGAgg... .xls
+- Results\GroundTruth_BWotsuA-redBMGAgg... .xls
+- Results\GroundTruth_BWmedcar-redBMGAgg... .xls
+dels 11 mètodes (3 taules per cada mètode), en una sola taula.
+
+```{r}
+test_im <- c(8,10,13,17,18,20,30,36,37,39,47,49,52,56,57)
+mainPath = "C:/Users/sinty/OneDrive - Universitat de les Illes Balears/TFG_Sinty_Garau"
+resultsPath = paste(mainPath,"/Results",sep = "")
+resultsNames <- list.files(path = resultsPath) # nom de tots els arxius de la carpeta "resultsPath" amb .xls
+```
+
+```{r}
+IoU_resultsGTvsBWotsu_Grey <- resultsNames[startsWith(resultsNames,"GroundTruth_BWotsu-redBMGAgg")][1:8]
+IoU_resultsGTvsBWotsuA_Grey <- resultsNames[startsWith(resultsNames,"GroundTruth_BWotsuA-redBMGAgg")][1:8]
+IoU_resultsGTvsBWmedcar_Grey <- resultsNames[startsWith(resultsNames,"GroundTruth_BWmedcar-redBMGAgg")][1:8]
+cat("IoU_resultsGTvsBW\n")
+(IoU_resultsGTvsBW <- c(IoU_resultsGTvsBWotsu_Grey, IoU_resultsGTvsBWotsuA_Grey, IoU_resultsGTvsBWmedcar_Grey))
+
+
+cat("IoU_methodsbin\n")
+(IoU_methodsbin <- c("otsu", "otsuA", "medcar"))
+cat("IoU_methodsbinbin\n")
+(IoU_methodsbinbin <- combn(IoU_methodsbin, 2, FUN = paste, collapse = "-"))
+cat("IoU_methodsgrey\n")
+(IoU_methodsgrey <- sub(".xls","",sub("GroundTruth_BWotsu-","",IoU_resultsGTvsBWotsu_Grey)))
+cat("IoU_methods\n")
+(IoU_methods <- sub(".xls","",sub("GroundTruth_BW","",IoU_resultsGTvsBW)))
+cat("IoU_methods3\n")
+(IoU_methods3 <- unlist(lapply(IoU_methodsgrey, FUN = function(grey){paste0(IoU_methodsbin, "-", grey)})))
+
+cat("IoU_methodsbin_s\n")
+(IoU_methodsbin_s <- c("ot", "oa", "mc"))
+cat("IoU_methodsbinbin_s\n")
+(IoU_methodsbinbin_s <- combn(IoU_methodsbin_s, 2, FUN = paste, collapse = "-"))
+cat("IoU_methodsgrey_s\n")
+(IoU_methodsgrey_s <- c("rBMGAE1","rBMGAE2","rBMGAMa","rBMGAMe","rBMGAME","rBMGAMi","rBMGAMV","rBMGAQO"))
+cat("IoU_methods_s\n")
+(IoU_methods_s <- unlist(lapply(IoU_methodsbin_s, FUN = function(bin){paste0(bin, "-", IoU_methodsgrey_s)})))
+cat("IoU_methods3_s\n")
+(IoU_methods3_s <- unlist(lapply(IoU_methodsgrey_s, FUN = function(grey){paste0(IoU_methodsbin_s, "-", grey)})))
+
+cat("IoU_B\n")
+(IoU_B <- length(IoU_methodsbin))
+cat("IoU_G\n")
+(IoU_G <- length(IoU_methodsgrey))
+cat("IoU_M\n")
+(IoU_M <- length(IoU_methods))
+```
+
+```{r}
+# for (g in 1:IoU_G){
+#   cat("Mètode: ",IoU_methodsgrey[g], "\n")
+#   ms_b123_g <- (c(1:3)-1)*IoU_G+g
+#   m3_b23_g <- (g-1)*IoU_B+c(2:IoU_B)
+#   m3_b12_g <- c(1:(IoU_B-1))
+#   cat("g =",g,", ms_b123_g =",ms_b123_g,", m3_b23_g =",m3_b23_g,", m3_b12_g =",m3_b12_g,"\n")
+# }
+```
+
+```{r}
+# for (g in 1:IoU_G){
+#   for (b_1 in 1:2){
+#     for (b_2 in (b_1+1):3){
+#       cat("Mètode: ",IoU_methodsgrey[g],". Binarització 1: ",IoU_methodsbin[b_1],". Binarització 2: ",IoU_methodsbin[b_2],"\n")
+#       bb = b_1+b_2-2
+#       ms_1 = (b_1-1)*IoU_G+g
+#       ms_2 = (b_2-1)*IoU_G+g
+#       cat("g =",g,", b_1 =",b_1,", b_2 =",b_2,", bb =",bb,", ms_1 =",ms_1,", ms_2 =",ms_2,"\n")
+#     }
+#   }
+# }
+```
+
+```{r}
+# for (ms in 1:IoU_M){
+#   cat("Mètode: ",IoU_methods[ms], "\n")
+#   b <- floor((ms-1)/IoU_G)+1
+#   g <- (ms-1)%%IoU_G+1
+#   ms_b123_g <- (c(1:3)-1)*IoU_G+g
+#   cat("ms =",ms,", b =",b,", g =",g,", ms_b123_g =",ms_b123_g,"\n")
+# }
+```
+
+```{r}
+# for (m3 in 1:IoU_M){
+#   for (b_2 in 1:IoU_B){
+#     cat("Mètode: ",IoU_methods3[m3],". Binarització en columna: ",IoU_methodsbin[b_2],"\n")
+#     g <- floor((m3-1)/IoU_B)+1
+#     b_1 <- (m3-1)%%IoU_B+1
+#     ms_1 <- (b_1-1)*IoU_G+g
+#     ms_2 <- (b_2-1)*IoU_G+g
+#     cat("g =",g,", b_1 =",b_1,", ms_1 =",ms_1,", ms_2 =",ms_2,"\n")
+#   }
+# }
+```
+
+```{r}
+# for (m3 in 1:IoU_M){
+#   for (b_2 in 1:IoU_B){
+#     cat("Mètode: ",IoU_methods3[m3],". Binarització en columna: ",IoU_methodsbin[b_2],"\n")
+#     g <- floor((m3-1)/IoU_B)+1
+#     b_1 <- (m3-1)%%IoU_B+1
+#     bb <- b_1+b_2-2
+#     ms_1 <- (b_1-1)*IoU_G+g
+#     ms_2 <- (b_2-1)*IoU_G+g
+#     cat("g =",g,", b_1 =",b_1,", bb =",bb,", ms_1 =",ms_1,", ms_2 =",ms_2,"\n")
+#   }
+# }
+```
+
+```{r}
+# for (bb in 1:IoU_B){
+#   cat("Mètode bin-bin: ",IoU_methodsbinbin[bb],"\n")
+#     b_1 <- bb%/%IoU_B+1
+#     b_2 <- bb%/%2+2
+#     cat("b_1 =",b_1,", b_2 =",b_2,"\n")
+# }
+```
+
+La taula global on les columnes són els mètodes i les files els resultats de la mesura IoU de les imatges test és:
+
+```{r}
+IoU_df_methods_wide <- data.frame(matrix(nrow = length(test_im), ncol = IoU_M))
+colnames(IoU_df_methods_wide) <- IoU_methods
+
+for (ms in 1:IoU_M){
+  IoU_df_methods_wide[,ms] <- read_excel(paste(resultsPath,"/",IoU_resultsGTvsBW[ms],sep=""))[test_im,"IoU"]
+}
+
+write_xlsx(data.frame(rownames(IoU_df_methods_wide),IoU_df_methods_wide),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_df_methods_wide.xlsx",sep = ""))
+```
+
+i la taula de factors on la primera columna és un valor de IoU i la segona columna l'etiqueta del mètode al que correspon és:
+
+```{r}
+IoU_df_methods_long <- stack(IoU_df_methods_wide)
+colnames(IoU_df_methods_long) <- c("IoU_value", "method")
+
+write_xlsx(data.frame(rownames(IoU_df_methods_long),IoU_df_methods_long),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_df_methods_long.xlsx",sep = ""))
+```
+
+Calculam la taula de mitjanes, desviacions típiques i medianes experimentals, i de les normalitzacions del conjunt test, per mètode.
+
+$H_0$: la mostra segueix una distribució normal (si $p-valor>0.1$)
+$H_1$: la mostra no segueix una distribució normal (si $p-valor<0.05$)
+
+```{r}
+IoU_df_m_sd_norm <- data.frame(matrix(nrow = IoU_M, ncol = 8))
+rownames(IoU_df_m_sd_norm) <- IoU_methods
+colnames(IoU_df_m_sd_norm) <- c("mean","sd","median","norm_pval","norm_01","norm_01_def","norm_01_aj","norm_01_aj_def")
+
+IoU_df_m_sd_norm[,1] <- colMeans(IoU_df_methods_wide)
+IoU_df_m_sd_norm[,2] <- apply(IoU_df_methods_wide,2,sd)
+IoU_df_m_sd_norm[,3] <- apply(IoU_df_methods_wide,2,median)
+for (ms in 1:IoU_M){
+  IoU_df_m_sd_norm[ms,4] <- shapiro.test(IoU_df_methods_wide[,ms])$p.value
+  if (IoU_df_m_sd_norm[ms,4]>0.1){
+    IoU_df_m_sd_norm[ms,5] <- 0
+    IoU_df_m_sd_norm[ms,6] <- 0
+  }else if (IoU_df_m_sd_norm[ms,4]<0.05){
+    IoU_df_m_sd_norm[ms,5] <- 1
+    IoU_df_m_sd_norm[ms,6] <- 1
+  }else{
+    IoU_df_m_sd_norm[ms,5] <- 2
+  }
+  
+  if (IoU_df_m_sd_norm[ms,4]>(0.1/IoU_B)){
+    IoU_df_m_sd_norm[ms,7] <- 0
+    IoU_df_m_sd_norm[ms,8] <- 0
+  }else if (IoU_df_m_sd_norm[ms,4]<(0.05/IoU_B)){
+    IoU_df_m_sd_norm[ms,7] <- 1
+    IoU_df_m_sd_norm[ms,8] <- 1
+  }else{
+    IoU_df_m_sd_norm[ms,7] <- 2
+  }
+}
+```
+
+Veiem si el contrast ajustat no decideix per algun mètode. 
+
+```{r}
+IoU_idx_norm_aj_2 <- which(IoU_df_m_sd_norm[,7] == 2, arr.ind = TRUE)
+if (length(IoU_idx_norm_aj_2) > 0){
+  for (ms in IoU_idx_norm_aj_2) {
+    b <- floor((ms-1)/IoU_G)+1
+    g <- (ms-1)%%IoU_G+1
+    ms_b123_g <- (c(1:3)-1)*IoU_G+g
+    
+    cat("El contrast ajustat no decideix pel mètode: ", IoU_methods[ms], "\n")
+    print(IoU_df_m_sd_norm[ms_b123_g,7])
+    
+    # Filtra el dataframe llarg per obtenir les dades dels dos mètodes
+    IoU_df_comp_norm_aj <- stack(IoU_df_methods_wide[,ms_b123_g])
+    colnames(IoU_df_comp_norm_aj) <- c("IoU_value", "method")
+  
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R13_IoU_boxplot_norm_aj_", IoU_methods[ms], ".png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(IoU_df_comp_norm_aj$IoU_value ~ IoU_df_comp_norm_aj$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de normalitats ajustades de", IoU_methods[ms]),
+      names = IoU_methods_s[ms_b123_g])
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(IoU_df_comp_norm_aj$IoU_value ~ IoU_df_comp_norm_aj$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de normalitats ajustades de", IoU_methods[ms]),
+      names = IoU_methods_s[ms_b123_g])
+    dev.off()
+  }
+}else {
+  cat("El contrast ajustat decideix per tots els mètodes.")
+}
+```
+
+Pels diagrames de caixes decidim que ni otsu-redBMGAggEx2 ni medcar-redBMGAggMVOWA són normals.
+
+```{r}
+IoU_df_m_sd_norm["otsu-redBMGAggEx2", 8] <- 1
+IoU_df_m_sd_norm["medcar-redBMGAggMVOWA", 8] <- 1
+```
+
+Veiem si els contrasts individuals no decideixen per algun mètode.
+
+```{r}
+IoU_idx_norm_ind_2 <- which(IoU_df_m_sd_norm[,5] == 2, arr.ind = TRUE)
+if (length(IoU_idx_norm_ind_2) > 0){
+  cat("Els contrasts individuals no decideixen pels mètodes: ", paste(IoU_methods[IoU_idx_norm_ind_2], collapse = ", "), "\n")
+  
+  for (ms in IoU_idx_norm_ind_2) {
+  
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R13_IoU_boxplot_norm_ind_", IoU_methods_s[ms], ".png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(IoU_df_methods_wide[,ms],
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Estudi de la normalitat individual de", IoU_methods[ms]),
+      names = IoU_methods_s[ms])
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(IoU_df_methods_wide[,ms],
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Estudi de la normalitat individual de", IoU_methods[ms]),
+      names = IoU_methods_s[ms])
+    dev.off()
+  }
+}else {
+  cat("Els contrasts individuals decideixen per tots els mètodes.")
+}
+```
+
+Pels diagrames de caixes decidim que no són normals.
+
+```{r}
+IoU_df_m_sd_norm[which(is.na(IoU_df_m_sd_norm[,6]), arr.ind = TRUE), 6] <- 1
+
+write_xlsx(data.frame(rownames(IoU_df_m_sd_norm),IoU_df_m_sd_norm),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_df_m_sd_norm.xlsx",sep = ""))
+```
+
+Com hi pot haver mètodes que tenguin les tres binaritzacions normals, hem d'estudiar l'homocedasticitat, és a dir, si totes les variàncies són o no iguals.
+
+$H_0$: $\sigma_{x_1} = \sigma_{x_2} = \sigma_{x_3}$ (si $p-valor>0.1$)
+$H_1$: hi ha qualque variància diferent (si $p-valor<0.05$)
+
+```{r}
+IoU_df_hom <- data.frame(matrix(nrow = IoU_G, ncol = 3))
+rownames(IoU_df_hom) <- IoU_methodsgrey
+colnames(IoU_df_hom) <- c("hom_pval","hom_01","hom_01_def")
+for (g in 1:IoU_G){
+  ms_b123_g <- (c(1:3)-1)*IoU_G+g
+    
+  IoU_df_comp_hom <- stack(IoU_df_methods_wide[,ms_b123_g])
+  colnames(IoU_df_comp_hom) <- c("IoU_value", "method")
+    
+  IoU_df_hom[g,1] <- bartlett.test(IoU_value ~ method, data = IoU_df_comp_hom)$p.value
+  if (IoU_df_hom[g,1] > 0.1){
+    IoU_df_hom[g,2] <- 0
+    IoU_df_hom[g,3] <- 0
+  }else if (IoU_df_hom[g,1] < 0.05){
+    IoU_df_hom[g,2] <- 1
+    IoU_df_hom[g,3] <- 1
+  }else{
+    IoU_df_hom[g,2] <- 2
+        
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R13_IoU_boxplot_hom_", IoU_methodsgrey[g], ".png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(IoU_df_comp_hom$IoU_value ~ IoU_df_comp_hom$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de totes les variàncies de", IoU_methodsgrey[g]),
+      names = IoU_methods_s[ms_b123_g])
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(IoU_df_comp_hom$IoU_value ~ IoU_df_comp_hom$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de totes les variàncies de", IoU_methodsgrey[g]),
+      names = IoU_methods_s[ms_b123_g])
+    dev.off()
+  }
+}
+```
+
+Pel diagrama de caixes descartam que les tres variàncies siguin iguals.
+
+```{r}
+IoU_df_hom[IoU_df_hom[,2] == 2, 3] <- 1
+
+write_xlsx(data.frame(rownames(IoU_df_hom),IoU_df_hom),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_df_hom.xlsx",sep = ""))
+```
+
+Anem a comprovar si, per cada mètode de segmentació en escala de grisos, podem rebutjar o no que les mitjanes de tots els mètodes són iguals. Si es satisfan la normalitat i l'homoscedasticitat en els tres mètodes, s'aplicara ANOVA. En cas contrari, s'aplica Kruskal-Wallis. 
+
+$H_0$: $\mu_{x_1} = \mu_{x_2} = \mu_{x_3}$ (si $p-valor>0.1$)
+$H_1$: hi ha qualque mitjana diferent (si $p-valor<0.05$)
+
+```{r}
+IoU_df_meane_all <- data.frame(matrix(nrow = IoU_G, ncol = 3))
+rownames(IoU_df_meane_all) <- IoU_methodsgrey
+colnames(IoU_df_meane_all) <- c("pval", "01", "01_def")
+for (g in 1:IoU_G){
+  ms_b123_g <- (c(1:3)-1)*IoU_G+g
+    
+  IoU_df_comp_meane_all <- stack(IoU_df_methods_wide[,ms_b123_g])
+  colnames(IoU_df_comp_meane_all) <- c("IoU_value", "method")
+    
+  if(sum(IoU_df_m_sd_norm[ms_b123_g,8]) == 0 && IoU_df_hom[g,3] == 0){
+    IoU_df_meane_all[g,1] <- summary(aov(IoU_value ~ method, data = IoU_df_comp_meane_all))[[1]]$"Pr(>F)"[1]
+  }else{
+    IoU_df_meane_all[g,1] <- kruskal.test(IoU_value ~ method, data = IoU_df_comp_meane_all)$p.value
+  }
+    
+  if(IoU_df_meane_all[g,1] > 0.1){
+    IoU_df_meane_all[g,2] <- 0
+    IoU_df_meane_all[g,3] <- 0
+  }else if(IoU_df_meane_all[g,1] < 0.05){
+    IoU_df_meane_all[g,2] <- 1
+    IoU_df_meane_all[g,3] <- 1
+  }else{
+    IoU_df_meane_all[g,2] <- 2
+        
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R13_IoU_boxplot_meane_all_", IoU_methodsgrey[g], ".png", sep = "")
+  
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(IoU_df_comp_meane_all$IoU_value ~ IoU_df_comp_meane_all$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de igualtat de mitjanes a", IoU_methodsgrey[g]),
+      names = IoU_methods_s[ms_b123_g])
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(IoU_df_comp_meane_all$IoU_value ~ IoU_df_comp_meane_all$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de igualtat de mitjanes a", IoU_methodsgrey[g]),
+      names = IoU_methods_s[ms_b123_g])
+    dev.off()
+  }
+}
+```
+
+Tots els contrastos decideixen.
+
+```{r}
+if (sum(IoU_df_meane_all[,3]) == IoU_G){
+  cat("De tots els mètodes, no totes les binaritzacions són iguals: ", paste(IoU_df_meane_all[,3], collapse = ", "), "\n")
+}else{
+  cat("Hi ha qualque mètode on totes les binaritzacions són iguals: ", paste(IoU_df_meane_all[,3], collapse = ", "), "\n")
+}
+```
+
+Tenim evidències estadístiques de que per cada mètode, no totes les binaritzacions són iguals.
+
+```{r}
+write_xlsx(data.frame(rownames(IoU_df_meane_all),IoU_df_meane_all),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_meane_all.xlsx",sep = ""))
+```
+
+Comparem idò per parells de binaritzacions de cada mètode si tenen o no mateixa mitjana. Si es satisfan la normalitat en totes les mostres i l'homoscedasticitat, s'aplica el test t per parelles amb ajust de Bonferroni. En cas contrari, s'aplica el test de Mann-Whitney per parelles amb l'ajust dels p-valors de Bonferroni.
+
+```{r}
+IoU_df_meane_pval <- data.frame(matrix(nrow = IoU_M, ncol = IoU_B))
+rownames(IoU_df_meane_pval) <- IoU_methods3
+colnames(IoU_df_meane_pval) <- IoU_methodsbin
+IoU_df_meane_01 <- IoU_df_meane_pval
+IoU_df_mean <- IoU_df_meane_pval
+
+for (g in 1:IoU_G){
+  ms_b123_g <- (c(1:3)-1)*IoU_G+g
+  m3_b23_g <- (g-1)*IoU_B+c(2:IoU_B)
+  m3_b12_g <- c(1:(IoU_B-1))
+    
+  IoU_df_comp_meane <- stack(IoU_df_methods_wide[,ms_b123_g])
+  colnames(IoU_df_comp_meane) <- c("IoU_value", "method")
+    
+  if(sum(IoU_df_m_sd_norm[ms_b123_g,8]) == 0 && IoU_df_hom[g,3] == 0){
+    IoU_df_meane_pval[m3_b23_g,m3_b12_g] <- pairwise.t.test(IoU_df_comp_meane$IoU_value, IoU_df_comp_meane$method, paired = TRUE, p.adjust.method = "bonferroni")$p.value
+  }else{
+    IoU_df_meane_pval[m3_b23_g,m3_b12_g] <- pairwise.wilcox.test(IoU_df_comp_meane$IoU_value, IoU_df_comp_meane$method, paired = TRUE, p.adjust.method = "bonferroni")$p.value
+  }
+}
+
+IoU_df_meane_01[] <- ifelse(IoU_df_meane_pval > 0.1, 0, ifelse(IoU_df_meane_pval < 0.05, 1, 2))
+IoU_df_mean[] <- ifelse(IoU_df_meane_pval > 0.1, "=", ifelse(IoU_df_meane_pval < 0.05, "dif", "?"))
+```
+
+```{r}
+IoU_idx_meane_2 <- which(IoU_df_meane_01 == 2, arr.ind = TRUE)
+if (length(IoU_idx_meane_2) > 0){
+  for (k in 1:nrow(IoU_idx_meane_2)){
+    m3 <- IoU_idx_meane_2[k, "row"]
+    b_2 <- IoU_idx_meane_2[k, "col"]
+    g <- floor((m3-1)/IoU_B)+1
+    b_1 <- (m3-1)%%IoU_B+1
+    ms_1 <- (b_1-1)*IoU_G+g
+    ms_2 <- (b_2-1)*IoU_G+g
+  
+    IoU_df_comp_meane <- stack(IoU_df_methods_wide[,c(ms_1,ms_2)])
+    colnames(IoU_df_comp_meane) <- c("IoU_value", "method")
+  
+    # Genera el nom de l'arxiu i el títol de la gràfica
+    nom_arxiu <- paste("R13_IoU_boxplot_meane_", IoU_methods_s[ms_1], "_",  IoU_methods_s[ms_2], ".png", sep = "")
+
+    # Crea el boxplot utilitzant les dades filtrades
+    boxplot(IoU_df_comp_meane$IoU_value ~ IoU_df_comp_meane$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de mean per", IoU_methods_s[ms_1], "=", IoU_methods_s[ms_2]),
+      names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+    png(nom_arxiu, width = 1200, height = 800)
+    boxplot(IoU_df_comp_meane$IoU_value ~ IoU_df_comp_meane$method,
+      horizontal = TRUE, boxwex = 0.5,
+      xlab = "Valors de IoU", ylab = "",
+      main = paste("Comparació de mean per", IoU_methods_s[ms_1], "=", IoU_methods_s[ms_2]),
+      names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+    dev.off()
+  }
+}else {
+  cat("Tots els contrastos decideixen.")
+}
+```
+
+Amb els boxplots obtinguts descartam que tenguin mitjanes iguals.
+
+```{r}
+IoU_df_meane_01[IoU_df_meane_01 == 2] <- 1
+IoU_df_mean[IoU_df_mean == "?"] <- "dif"
+```
+
+```{r}
+write_xlsx(data.frame(rownames(IoU_df_meane_pval),IoU_df_meane_pval),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_meane_pval.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(IoU_df_meane_01),IoU_df_meane_01),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_meane_01.xlsx",sep = ""))
+```
+
+Dels mètodes que s'han determinat com diferents, es comparen parell a parell individualment. Per saber quin test i contrast aplicar, s'han de comprovar: la normalitat, les variàncies, i les mitjanes mostrals.
+
+Per això feim primer les taules de variàncies. La primera té els p-valors de realitzar el contrast de variàncies següent, per cada parell de mètodes:
+
+$H_0$: $\sigma_x = \sigma_y$ (si $p-valor>0.1$)
+$H_1$: $\sigma_x \neq \sigma_y$ (si $p-valor<0.05$)
+
+Si ambdues mostres provenen de distribucions normals, s'aplica el test F, sinó el test de Fligner-Killeen.
+
+```{r}
+IoU_df_var_cont <- data.frame(matrix(nrow = IoU_G, ncol = IoU_B)) # Tipus de contrast aplicat
+rownames(IoU_df_var_cont) <- IoU_methodsgrey
+colnames(IoU_df_var_cont) <- IoU_methodsbinbin
+IoU_df_var_pval <- IoU_df_var_cont # p-valor del contrast aplicat
+IoU_df_var_01 <- IoU_df_var_cont # Hipòtesi acceptada del contrast aplicat
+IoU_df_var <- IoU_df_var_cont # Relació final
+for (g in 1:IoU_G){
+  for (b_1 in 1:2){
+    for (b_2 in (b_1+1):3){
+      bb = b_1+b_2-2
+      ms_1 = (b_1-1)*IoU_G+g
+      ms_2 = (b_2-1)*IoU_G+g
+            
+      IoU_df_comp_var <- stack(IoU_df_methods_wide[,c(ms_1,ms_2)])
+      colnames(IoU_df_comp_var) <- c("IoU_value", "method")
+            
+      if (IoU_df_m_sd_norm[ms_1,6] == 0 && IoU_df_m_sd_norm[ms_2,6] == 0){ # Si ambdós són normals, test F
+        IoU_df_var_pval[g, bb] <- var.test(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method, paired = TRUE)$p.value
+      }else{ # Si no són ambdós normals
+        IoU_df_var_pval[g, bb] <- fligner.test(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method)$p.value
+      }
+            
+      if (IoU_df_var_pval[g,bb] > 0.1){
+        IoU_df_var_cont[g,bb] <- "="
+        IoU_df_var_01[g,bb] <- 0
+        IoU_df_var[g,bb] <- "="
+      }else if (IoU_df_var_pval[g,bb] < 0.05){
+        IoU_df_var_01[g,bb] <- 1
+      }else{
+        IoU_df_var_01[g,bb] <- 2
+                
+        # Genera el nom de l'arxiu i el títol de la gràfica
+        nom_arxiu <- paste("R13_IoU_boxplot_vare_", IoU_methods_s[ms_1], "_",  IoU_methods_s[ms_2], ".png", sep = "")
+
+        # Crea el boxplot utilitzant les dades filtrades
+        boxplot(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method,
+          horizontal = TRUE, boxwex = 0.5,
+          xlab = "Valors de IoU", ylab = "",
+          main = paste("Comparació de var per", IoU_methods_s[ms_1], "=", IoU_methods_s[ms_2]),
+          names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+        png(nom_arxiu, width = 1200, height = 800)
+        boxplot(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method,
+          horizontal = TRUE, boxwex = 0.5,
+          xlab = "Valors de IoU", ylab = "",
+          main = paste("Comparació de var per", IoU_methods_s[ms_1], "=", IoU_methods_s[ms_2]),
+          names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+        dev.off()
+      }
+    }
+  }
+}
+```
+
+Tots els contrasts decideixen.
+
+```{r}
+# IoU_df_var_01[IoU_df_var_01 == 2] <- 1
+```
+
+Estudiem quina relació tenen les variàncies que han resultat ser estadísticament no iguals. Si ambdues mostres provenen de distribucions normals, aplicarem var.test, sinó ens basarem en boxplots. A més ens basarem amb les desviacions mostrals per decidir quin contrast aplicar:
+
+- Si $s_{X} > s_{Y}$, aplicam el contrast
+
+$H_0$: $\sigma_x \leq \sigma_y$ (si $p-valor>0.1$)
+$H_1$: $\sigma_x > \sigma_y$ (si $p-valor<0.05$)
+
+- Si $s_{X} < s_{Y}$, aplicam el contrast
+
+$H_0$: $\sigma_x \geq \sigma_y$ (si $p-valor>0.1$)
+$H_1$: $\sigma_x < \sigma_y$ (si $p-valor<0.05$)
+
+```{r}
+for (g in 1:IoU_G){
+  for (b_1 in 1:2){
+    for (b_2 in (b_1+1):3){
+      bb = b_1+b_2-2
+      ms_1 = (b_1-1)*IoU_G+g
+      ms_2 = (b_2-1)*IoU_G+g
+            
+      if (IoU_df_var_01[g,bb] == 1){
+              
+        IoU_df_comp_var <- stack(IoU_df_methods_wide[,c(ms_1,ms_2)])
+        colnames(IoU_df_comp_var) <- c("IoU_value", "method")
+            
+        if (IoU_df_m_sd_norm[ms_1,2] > IoU_df_m_sd_norm[ms_2,2]){ # Contrast >
+          IoU_df_var_cont[g,bb] <- ">"
+          if (IoU_df_m_sd_norm[ms_1,6] == 0 && IoU_df_m_sd_norm[ms_2,6] == 0){ # Si ambdós són normals, test F
+            IoU_df_var_pval[g, bb] <- var.test(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method, alternative = "greater", paired = TRUE)$p.value
+          }else{
+            IoU_df_var_pval[g,bb] <- 2
+            IoU_df_var_01[g,bb] <- 2
+          }
+                    
+          if (IoU_df_var_pval[g,bb] > 0.1 && IoU_df_var_pval[g,bb] != 2){
+            IoU_df_var_01[g,bb] <- 0
+            IoU_df_var[g,bb] <- "<"
+          }else if (IoU_df_var_pval[g,bb] < 0.05){
+            IoU_df_var_01[g,bb] <- 1
+            IoU_df_var[g,bb] <- ">"
+          }else{
+            # Genera el nom de l'arxiu i el títol de la gràfica
+            nom_arxiu <- paste("R13_IoU_boxplot_varg_", IoU_methods_s[ms_1], "_",  IoU_methods_s[ms_2], ".png", sep = "")
+
+            # Crea el boxplot utilitzant les dades filtrades
+            boxplot(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method,
+              horizontal = TRUE, boxwex = 0.5,
+              xlab = "Valors de IoU", ylab = "",
+              main = paste("Comparació de var per", IoU_methods_s[ms_1], ">", IoU_methods_s[ms_2]),
+              names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+            png(nom_arxiu, width = 1200, height = 800)
+            boxplot(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method,
+              horizontal = TRUE, boxwex = 0.5,
+              xlab = "Valors de IoU", ylab = "",
+              main = paste("Comparació de var per", IoU_methods_s[ms_1], ">", IoU_methods_s[ms_2]),
+              names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+            dev.off()
+          }
+        }else{ # Contrast <
+          IoU_df_var_cont[g,bb] <- "<"
+          if (IoU_df_m_sd_norm[ms_1,6] == 0 && IoU_df_m_sd_norm[ms_2,6] == 0){ # Si ambdós són normals, test F
+            IoU_df_var_pval[g, bb] <- var.test(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method, alternative = "less", paired = TRUE)$p.value
+          }else{
+            IoU_df_var_pval[g,bb] <- 2
+            IoU_df_var_01[g,bb] <- 2
+          }
+                    
+          if (IoU_df_var_pval[g,bb] > 0.1 && IoU_df_var_pval[g,bb] != 2){
+            IoU_df_var_01[g,bb] <- 0
+            IoU_df_var[g,bb] <- ">"
+          }else if (IoU_df_var_pval[g,bb] < 0.05){
+            IoU_df_var_01[g,bb] <- 1
+            IoU_df_var[g,bb] <- "<"
+          }else{
+            # Genera el nom de l'arxiu i el títol de la gràfica
+            nom_arxiu <- paste("R13_IoU_boxplot_varl_", IoU_methods_s[ms_1], "_",  IoU_methods_s[ms_2], ".png", sep = "")
+
+            # Crea el boxplot utilitzant les dades filtrades
+            boxplot(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method,
+              horizontal = TRUE, boxwex = 0.5,
+              xlab = "Valors de IoU", ylab = "",
+              main = paste("Comparació de var per", IoU_methods_s[ms_1], "<", IoU_methods_s[ms_2]),
+              names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+            png(nom_arxiu, width = 1200, height = 800)
+            boxplot(IoU_df_comp_var$IoU_value ~ IoU_df_comp_var$method,
+              horizontal = TRUE, boxwex = 0.5,
+              xlab = "Valors de IoU", ylab = "",
+              main = paste("Comparació de var per", IoU_methods_s[ms_1], "<", IoU_methods_s[ms_2]),
+              names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+            dev.off()
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+Tots els contrasts decideixen.
+
+```{r}
+# IoU_df_var[which(IoU_df_var_01 == 2, arr.ind = TRUE)] <- IoU_df_var_cont[which(IoU_df_var_01 == 2, arr.ind = TRUE)]
+# IoU_df_var_01[IoU_df_var_01 == 2] <- 1
+```
+
+```{r}
+write_xlsx(data.frame(rownames(IoU_df_var_cont),IoU_df_var_cont),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_var_cont.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(IoU_df_var_pval),IoU_df_var_pval),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_var_pval.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(IoU_df_var_01),IoU_df_var_01),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_var_01.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(IoU_df_var),IoU_df_var),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_df_var.xlsx",sep = ""))
+```
+
+A continuació feim els contrasts de desigualtat de mitjanes per cada parell de mètodes que han resultat ser estadísticament diferents.
+
+El contrast a aplicar dependrà de la relació de les mitjanes mostrals:
+
+- Si $\overline{X} > \overline{Y}$, aplicam el contrast
+
+$H_0$: $\mu_x \leq \mu_y$ (si $p-valor>0.1$)
+$H_1$: $\mu_x > \mu_y$ (si $p-valor<0.05$)
+
+- Si $\overline{X} < \overline{Y}$, aplicam el contrast
+
+$H_0$: $\mu_x \geq \mu_y$ (si $p-valor>0.1$)
+$H_1$: $\mu_x < \mu_y$ (si $p-valor<0.05$)
+
+```{r}
+IoU_df_meand_pval <- data.frame(matrix(nrow = IoU_M, ncol = IoU_B))
+rownames(IoU_df_meand_pval) <- IoU_methods3
+colnames(IoU_df_meand_pval) <- IoU_methodsbin
+IoU_df_meand_01 <- IoU_df_meand_pval
+IoU_df_meand_cont <- IoU_df_meand_pval
+IoU_idx_mean_dif <- which(IoU_df_meane_01 == 1, arr.ind = TRUE)
+for (k in 1:nrow(IoU_idx_mean_dif)) {
+  m3 <- IoU_idx_mean_dif[k, "row"]
+  b_2 <- IoU_idx_mean_dif[k, "col"]
+  g <- floor((m3-1)/IoU_B)+1
+  b_1 <- (m3-1)%%IoU_B+1
+  bb <- b_1+b_2-2
+  ms_1 <- (b_1-1)*IoU_G+g
+  ms_2 <- (b_2-1)*IoU_G+g
+    
+  IoU_df_comp_meand <- stack(IoU_df_methods_wide[,c(ms_1,ms_2)])
+  colnames(IoU_df_comp_meand) <- c("IoU_value", "method")
+    
+  if(IoU_df_m_sd_norm[ms_1,1] > IoU_df_m_sd_norm[ms_2,1]){ #si mean(ms_1) > mean(ms_2)
+    IoU_df_meand_cont[m3,b_2] <- ">"
+    if(IoU_df_m_sd_norm[ms_1,6] == 0 && IoU_df_m_sd_norm[ms_2,6] == 0){ #si ambdós normals
+      if(IoU_df_var[g,bb] == "="){ #si desviacions iguals
+        IoU_df_meand_pval[m3,b_2] <- t.test(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method, alternative = "greater", paired = TRUE, var.equal = TRUE)$p.value
+      }else{
+        IoU_df_meand_pval[m3,b_2] <- t.test(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method, alternative = "greater", paired = TRUE)$p.value
+      }
+    }else{
+      IoU_df_meand_pval[m3,b_2] <- wilcox.test(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method, alternative = "greater", paired = TRUE)$p.value
+    }
+        
+    if(IoU_df_meand_pval[m3,b_2] > 0.1){
+      IoU_df_meand_01[m3,b_2] <- 0
+      IoU_df_mean[m3,b_2] <- "<"
+    }else if(IoU_df_meand_pval[m3,b_2] < 0.05){
+      IoU_df_meand_01[m3,b_2] <- 1
+      IoU_df_mean[m3,b_2] <- ">"
+    }else{
+      IoU_df_meand_01[m3,b_2] <- 2
+            
+      # Genera el nom de l'arxiu i el títol de la gràfica
+      nom_arxiu <- paste("R13_IoU_boxplot_meang_", methods_s[ms_1], "_",  methods_s[ms_2], ".png", sep = "")
+
+      # Crea el boxplot utilitzant les dades filtrades
+      boxplot(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de IoU", ylab = "",
+        main = paste("Comparació de mean per", IoU_methods_s[ms_1], ">", IoU_methods_s[ms_2]),
+        names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+      png(nom_arxiu, width = 1200, height = 800)
+      boxplot(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de IoU", ylab = "",
+        main = paste("Comparació de mean per", IoU_methods_s[ms_1], ">", IoU_methods_s[ms_2]),
+        names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+      dev.off()
+    }
+  }else{ #si mean(ms_1) < mean(ms_2)
+    IoU_df_meand_cont[m3,b_2] <- "<"
+    if(IoU_df_m_sd_norm[ms_1,6] == 0 && IoU_df_m_sd_norm[ms_2,6] == 0){ #si ambdós normals
+      if(IoU_df_var[g,bb] == "="){ #si desviacions iguals
+        IoU_df_meand_pval[m3,b_2] <- t.test(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method, alternative = "less", paired = TRUE, var.equal = TRUE)$p.value
+      }else{
+        IoU_df_meand_pval[m3,b_2] <- t.test(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method, alternative = "less", paired = TRUE)$p.value
+      }
+    }else{
+      IoU_df_meand_pval[m3,b_2] <- wilcox.test(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method, alternative = "less", paired = TRUE)$p.value
+    }
+        
+    if(IoU_df_meand_pval[m3,b_2] > 0.1){
+      IoU_df_meand_01[m3,b_2] <- 0
+      IoU_df_mean[m3,b_2] <- ">"
+    }else if(IoU_df_meand_pval[m3,b_2] < 0.05){
+      IoU_df_meand_01[m3,b_2] <- 1
+      IoU_df_mean[m3,b_2] <- "<"
+    }else{
+      IoU_df_meand_01[m3,b_2] <- 2
+            
+      # Genera el nom de l'arxiu i el títol de la gràfica
+      nom_arxiu <- paste("R13_IoU_boxplot_meanl_", methods_s[ms_1], "_",  methods_s[ms_2], ".png", sep = "")
+
+      # Crea el boxplot utilitzant les dades filtrades
+      boxplot(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de IoU", ylab = "",
+        main = paste("Comparació de mean per", IoU_methods_s[ms_1], "<", IoU_methods_s[ms_2]),
+        names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+      png(nom_arxiu, width = 1200, height = 800)
+      boxplot(IoU_df_comp_meand$IoU_value ~ IoU_df_comp_meand$method,
+        horizontal = TRUE, boxwex = 0.5,
+        xlab = "Valors de IoU", ylab = "",
+        main = paste("Comparació de mean per", IoU_methods_s[ms_1], "<", IoU_methods_s[ms_2]),
+        names = c(IoU_methods_s[ms_1],IoU_methods_s[ms_2]))
+      dev.off()
+    }
+  }
+}
+```
+
+El contrast decideix per totes les combinacions.
+
+```{r}
+IoU_df_mean_def <- data.frame(matrix(nrow = IoU_G, ncol = IoU_B))
+rownames(IoU_df_mean_def) <- IoU_methodsgrey
+colnames(IoU_df_mean_def) <- IoU_methodsbinbin
+for(g in 1:IoU_G){
+  IoU_df_mean_def[g,1] <- ifelse(IoU_df_mean[(g-1)*IoU_B+2,1] == "=", "=", ifelse(IoU_df_mean[(g-1)*IoU_B+2,1] == ">", "<", ">"))
+  IoU_df_mean_def[g,2] <- ifelse(IoU_df_mean[(g-1)*IoU_B+3,1] == "=", "=", ifelse(IoU_df_mean[(g-1)*IoU_B+3,1] == ">", "<", ">"))
+  IoU_df_mean_def[g,3] <- ifelse(IoU_df_mean[(g-1)*IoU_B+3,2] == "=", "=", ifelse(IoU_df_mean[(g-1)*IoU_B+3,2] == ">", "<", ">"))
+}
+
+write_xlsx(data.frame(rownames(IoU_df_meand_cont),IoU_df_meand_cont),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_meand_cont.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(IoU_df_meand_pval),IoU_df_meand_pval),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_meand_pval.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(IoU_df_meand_01),IoU_df_meand_01),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_meand_01.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(IoU_df_mean),IoU_df_mean),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_df_mean.xlsx",sep = ""))
+write_xlsx(data.frame(rownames(IoU_df_mean_def),IoU_df_mean_def),paste(mainPath,"/Code/Contrasts/R13/R13_IoU_df_mean_def.xlsx",sep = ""))
+```
+
+Indicam per cada mètode quina és la millor binarització. 
+
+```{r}
+IoU_df_mean_def_bin <- data.frame(matrix(nrow = IoU_G, ncol = IoU_B))
+rownames(IoU_df_mean_def_bin) <- IoU_methodsgrey
+colnames(IoU_df_mean_def_bin) <- IoU_methodsbinbin
+IoU_df_mean_def_bin[,1] <- ifelse(IoU_df_mean_def[,1] == ">", 1, ifelse(IoU_df_mean_def[,1] == "<", 2, 0))
+IoU_df_mean_def_bin[,2] <- ifelse(IoU_df_mean_def[,2] == ">", 1, ifelse(IoU_df_mean_def[,2] == "<", 3, 0))
+IoU_df_mean_def_bin[,3] <- ifelse(IoU_df_mean_def[,3] == ">", 2, ifelse(IoU_df_mean_def[,3] == "<", 3, 0))
+```
+
+Afegim les conclusions obtingudes amb IoU.
+
+```{r}
+df_binbin <- IoU_df_mean_def_bin
+```
+
+Estudiem la variància dels casos d'empat, si n'hi ha.
+
+```{r}
+IoU_idx_meane <- which(df_binbin == 0, arr.ind = TRUE)
+if (length(IoU_idx_meane) > 0){
+  for (k in 1:nrow(IoU_idx_meane)){
+    g <- IoU_idx_meane[k, "row"]
+    bb <- IoU_idx_meane[k, "col"]
+    b_1 <- bb%/%IoU_B+1
+    b_2 <- bb%/%2+2
+    ms_1 = (b_1-1)*IoU_G+g
+    ms_2 = (b_2-1)*IoU_G+g
+
+    if (IoU_df_var[g,bb] == "="){
+      cat("Les variàncies satisfan la relació", IoU_methods_s[ms_1], IoU_df_var[g,bb], IoU_methods_s[ms_2], "\n")
+    }else if (IoU_df_var[g,bb] == ">"){
+      cat("Les variàncies satisfan la relació", IoU_methods_s[ms_1], IoU_df_var[g,bb], IoU_methods_s[ms_2], ", per tant",IoU_methods_s[ms_2],"és millor \n")
+      IoU_df_mean_def_bin[g,bb] <- b_2
+      df_binbin[g,bb] <- b_2
+    }else if (IoU_df_var[g,bb] == "<"){
+      cat("Les variàncies satisfan la relació", IoU_methods_s[ms_1], IoU_df_var[g,bb], IoU_methods_s[ms_2], ", per tant",IoU_methods_s[ms_1],"és millor \n")
+      IoU_df_mean_def_bin[g,bb] <- b_1
+      df_binbin[g,bb] <- b_1
+    }
+  }
+}else {
+  cat("No hi ha empats entre binaritzacions.")
+}
+```
+
+Obtenim la taula de binaritzaciones finals, veient si qualque mètode encara no decideix.
+
+```{r}
+df_millor_bin <- data.frame(matrix(nrow = IoU_G, ncol = 3))
+rownames(df_millor_bin) <- IoU_methodsgrey
+colnames(df_millor_bin) <- c("bin_123", "binarització", "procés")
+df_millor_bin$bin_123 <- apply(df_binbin, 1, function(x) x[duplicated(x)][1])
+if(any(is.na(df_millor_bin$bin_123)) || any(df_millor_bin$bin_123 == 0, na.rm = TRUE)){
+  cat("Qualque mètode no decideix.")
+}else {
+  cat("Tots els mètodes decideixen.")
+}
+```
+
+Tots els mètodes decideixen. Per tant, afegim les dades restants a la taula final.
+
+```{r}
+df_millor_bin$binarització <- IoU_methodsbin[df_millor_bin$bin_123]
+df_millor_bin$procés <- IoU_methods[(df_millor_bin$bin_123 - 1) * IoU_G + 1:IoU_G]
+write_xlsx(data.frame(rownames(df_millor_bin),df_millor_bin),paste(mainPath,"/Code/Contrasts/R13/R13_df_millor_bin.xlsx",sep = ""))
+```
