@@ -9,7 +9,7 @@
 ---
 
 ## Descripció
-Aquest repositori conté l'entorn de treball i el codi font desenvolupat per a l'experimentació del Treball Final de Grau (TFG). El projecte s'enfoca en l'estudi, implementació i avaluació de mètodes automàtics de segmentació de vasos sanguinis en angiografies retinals (utilitzant les bases de dades DRIVE i STARE), així com en la millora dels resultats individuals mitjançant l'aplicació de diferents funcions d'agregació.
+Aquest repositori conté l'entorn de treball i el codi font desenvolupat per a l'experimentació del Treball Final de Grau (TFG). El projecte s'enfoca en l'estudi, implementació i avaluació de mètodes automàtics de segmentació de vasos sanguinis en angiografies retinals (utilitzant les bases de dades DRIVE i STARE), així com de la millora dels resultats individuals mitjançant l'aplicació de diferents funcions d'agregació.
 
 A més del codi d'execució, s'inclouen les imatges de referència, els fitxers de dades exhaustius en format Excel amb totes les mètriques d'avaluació calculades i una mostra representativa de les imatges segmentades resultants.
 
