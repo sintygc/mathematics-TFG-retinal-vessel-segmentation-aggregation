@@ -14,18 +14,16 @@ Aquest repositori conté l'entorn de treball i el codi font desenvolupat per a l
 A més del codi d'execució, s'inclouen les imatges de referència, els fitxers de dades exhaustius en format Excel amb totes les mètriques d'avaluació calculades i una mostra representativa de les imatges segmentades resultants.
 
 ## Estructura
-- `Code/`:
-- `Images/`:
-- `Results/`:
-- `Tests/`:
-- TFG_EPS0041_Memòria_Sinty_Garau_Chen.pdf: Memòria del TFG.
+- `Code/`: Scripts de MATLAB per al processament d'imatges i de R per a la realització dels contrasts.
+- `Images/`: Imatges originals d'angiografies de la retina (selecció de les bases de dades DRIVE i STARE), segmentacions i màscara de la regió fora del camp visual de veritat fonamental realitzades pels especialistes. S'inclouen a més la màscara òptima calculada i una mostra de les segmentacions obtingudes.
+- `Results/`: Arxius en format Excel obtinguts de l'script ScriptMain.mlx.
+- `Tests/`: Mostra dels resultats obtinguts de l'arxiu ScriptTests.mlx.
+- `TFG_EPS0041_Memòria_Sinty_Garau_Chen.pdf`: Document en format PDF amb la memòria del Treball Final de Grau.
 
 ## Requisits
 - MATLAB (paquets: Image Processing Toolbox, Signal Processing Toolbox, Statistics and Machine Learning Toolbox).
 - R, RStudio
 - Git LFS
-
-## Execució
 
 ## Resum de la memòria
 
