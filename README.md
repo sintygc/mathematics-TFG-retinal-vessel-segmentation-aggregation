@@ -20,9 +20,9 @@ A més del codi d'execució, s'inclouen les imatges de referència, els fitxers 
     - `ScriptExtres.mlx`: Proves i anàlisi de funcionalitats realitzades durant l'experimentació.
     - `Contrasts/`: Estudi de contrastos d'hipòtesi. Inclou tant el codi com els resultats obtinguts. La descripció de cada passa es detalla als punts marcats amb 'R' a l'índex de `ScriptMain.mlx`.
     - La resta d'arxius i carpetes són els necessaris per executar qualsevol dels tres scripts.
-- `Images/`: Imatges originals d'angiografies de la retina (selecció de les bases de dades DRIVE i STARE), segmentacions i màscara de la regió fora del camp visual de veritat fonamental realitzades pels especialistes. S'inclouen a més la màscara òptima calculada i una mostra de les segmentacions obtingudes.
+- `Images/`: Imatges originals d'angiografies de la retina (selecció de les bases de dades DRIVE i STARE), segmentacions i màscara de la regió fora del camp visual de veritat fonamental realitzades pels especialistes. S'inclouen a més la màscara òptima calculada i una mostra de les segmentacions obtingudes. La resta d'imatges es poden obtenir executant `ScriptMain.mlx`.
 - `Results/`: Taules en format Excel obtingudes de `ScriptMain.mlx`.
-- `Tests/`: Mostra dels resultats derivats de `ScriptTests.mlx`.
+- `Tests/`: Mostra dels resultats derivats de `ScriptTests.mlx`. La totalitat es pot obtenir executant l'script.
 - `TFG_EPS0041_Memòria_Sinty_Garau_Chen.pdf`: Document en format PDF amb la memòria del Treball Final de Grau.
 
 ## Requisits
