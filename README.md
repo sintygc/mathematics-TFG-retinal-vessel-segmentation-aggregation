@@ -14,10 +14,15 @@ Aquest repositori conté l'entorn de treball i el codi font desenvolupat per a l
 A més del codi d'execució, s'inclouen les imatges de referència, els fitxers de dades exhaustius en format Excel amb totes les mètriques d'avaluació calculades i una mostra representativa de les imatges segmentades resultants.
 
 ## Estructura
-- `Code/`: Scripts de MATLAB per al processament d'imatges i de R per a la realització dels contrasts.
+- `Code/`: Codi font de MATLAB per al processament d'imatges i de R per a l'avaluació estadística.
+    - `ScriptMain.mlx`: Nucli de la fase experimental, des de la càrrega de dades fins a la generació dels resultats amb les mètriques d'avaluació calculades.
+    - `ScriptTests.mlx`: Optimització de paràmetres i ajustos per aplicar als processos avaluats.
+    - `ScriptExtres.mlx`: Proves i anàlisi de funcionalitats realitzades durant l'experimentació.
+    - `Contrasts/`: Estudi de contrastos d'hipòtesi. Inclou tant el codi com els resultats obtinguts. La descripció de cada passa es detalla als punts marcats amb 'R' a l'índex de `ScriptMain.mlx`.
+    - La resta d'arxius i carpetes són els necessaris per executar qualsevol dels tres scripts.
 - `Images/`: Imatges originals d'angiografies de la retina (selecció de les bases de dades DRIVE i STARE), segmentacions i màscara de la regió fora del camp visual de veritat fonamental realitzades pels especialistes. S'inclouen a més la màscara òptima calculada i una mostra de les segmentacions obtingudes.
-- `Results/`: Arxius en format Excel obtinguts de l'script ScriptMain.mlx.
-- `Tests/`: Mostra dels resultats obtinguts de l'arxiu ScriptTests.mlx.
+- `Results/`: Taules en format Excel obtingudes de `ScriptMain.mlx`.
+- `Tests/`: Mostra dels resultats derivats de `ScriptTests.mlx`.
 - `TFG_EPS0041_Memòria_Sinty_Garau_Chen.pdf`: Document en format PDF amb la memòria del Treball Final de Grau.
 
 ## Requisits
